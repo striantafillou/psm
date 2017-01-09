@@ -42,7 +42,7 @@ for i = 1:length(subjects)
         %[stress_tmp,  mood_tmp, energy_tmp, focus_tmp] = deal(tab_emm.Var2, tab_emm.Var3, tab_emm.Var4, tab_emm.Var5); % read variables
         for iDate =1:nDates
             dateInd= ismember(entries_date_ids, date_ids(iDate)); 
-            if sum(dateInd)>1; fprintf('something is wrong\n');
+            if sum(dateInd)>1; %fprintf('something is wrong\n');
                 % if you have more than one report for the same day, keep
                 % only the first.
                 discInds = find(dateInd); discInds=discInds(2:end); dateInd(discInds)=false;
@@ -50,6 +50,12 @@ for i = 1:length(subjects)
             end
             if sum(dateInd)==0; continue;end
             %fprintf('Date %d inds [%s]\n', iDate, num2str(find(dateInd)));
+            % fix am-pm mixup issue
+            if  hour(time_sleep(dateInd))>=12 && hour(time_sleep(dateInd))<15 && (time_wake(dateInd)-time_sleep(dateInd))*86400/3600>=15; %
+                fprintf('Sleep time %s, wake time %s, ', datestr(time_sleep(dateInd)), datestr(time_wake(dateInd)));
+                time_sleep(dateInd) = time_sleep(dateInd)+ datenum(hours(12));
+                fprintf('\t new wake time %s\n', datestr(time_sleep(dateInd)));
+            end
             sleep_duration(iDate)= (time_wake(dateInd)-time_sleep(dateInd))*86400/3600;
             sleep_quality(iDate) = tab_sleep.Var6(dateInd);
             day_type(iDate)= find(strcmp({'off', 'partial', 'normal'}, tab_sleep.Var7(dateInd)));
@@ -118,7 +124,7 @@ save sleep sleep
 %         day_type{i} = dtp;
 %         
 %         % duration-quality correlation
-%         c =corr(sleep_qual{i}, sleep_dur{i}, 'type', 'spearman');
+%         c =corr(sleep_qual{i}, sleep_dur{i});
 %         duration_qual_corr (i) = c;
 %         
 %        
