@@ -19,6 +19,28 @@ end
 
 save features features;
  
+% also save extended features with previous versions of variables
+clear; clc; load features;
+nSubjects = size(features, 1);extendedFeatures = cell(nSubjects, 1);
+for iSub =1:nSubjects
+    
+    iFeatures = features{iSub};
+    if isempty(iFeatures);continue;end
+    nSamples = height(iFeatures);
+    prevInds =1:nSamples-1;
+    curInds = 2:nSamples;
+    effSamples = nSamples-1; % samples used
+    variableNames = iFeatures.Properties.VariableNames;
+    
+    
+    curFeatures = iFeatures(curInds, :);
+    prevFeatures = iFeatures(prevInds, 4:end);
+    prevFeatures.Properties.VariableNames = strcat('prev_', variableNames(4:end));
+    extendedFeatures{iSub} = [curFeatures prevFeatures];
+end
+
+save features features extendedFeatures;
+
 
 % clear
 % load sleep_data; load emm_data;load subjects;nSubjects= length(subjects);
