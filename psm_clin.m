@@ -1,7 +1,8 @@
-
+% Run psm also using demographic variables
 clear;close all;
 load('features', 'allExtendedFeatures*');load subjects;
 addpath('psm_functions');
+
 % remove nans
 [nanRows,~] = find(isnan(allExtendedFeatures{:, :}));allExtendedFeatures(nanRows, :)= [];
 fprintf('Removing %d rows with nan values\n', length(unique(nanRows)));

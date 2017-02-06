@@ -1,102 +1,103 @@
+%
 clear;close all;
-load('features', 'extendedFeatures');load subjects;
-outcome_var = 'mood';
+load('features', 'allExtendedFeatures*');load subjects;
+addpath('psm_functions');
+% remove nans
+[nanRows,~] = find(isnan(allExtendedFeatures{:, :}));allExtendedFeatures(nanRows, :)= []; 
+[nanRowsNorm, ~] = find(isnan(allExtendedFeaturesNorm{:, :})); allExtendedFeaturesNorm(nanRowsNorm, :)= [];
+% % Effect of sleep_quality on mood;
+fprintf('Removing %d rows with nan values\n', length(unique(nanRows)));
+
+graph =true;
+figDir = 'figs';
 treatment_var = 'sleep_quality';
-depressed=false;
+outcome_var = 'mood';
+list_of_conf = { 'sleep_duration', 'prev_mood', 'prev_stress', 'prev_energy', 'prev_focus', 'prev_activity', 'prev_day_type'};
+
+
+% Effect of prev_mood on sleep_quality;
+%  treatment_var = 'prev_mood';
+%  outcome_var = 'sleep_quality';
+%  list_of_conf = { 'prev_day_type', 'prev_activity'};
 
 fprintf('-------------------------------------------------------------\n');
-if depressed    
-    extendedFeatures(~depressedSubjects) =[];
-    fprintf('On depressed subjects\n');
-else
-    fprintf('On all subjects\n');
-end
 fprintf('Effect of %s on %s given\n', treatment_var, outcome_var);
+fprintf('\t%s\n', list_of_conf{:});
+fprintf('\n-------------------------------------------------------------\n');
+
+fprintf('On all subjects, %d samples\n',height(allExtendedFeatures));
 
 
+[matching(1)] = ...
+        psm_causal_effects(allExtendedFeatures, treatment_var, outcome_var, list_of_conf, graph, 'psm_no_replacement_inter_subject', 'caliper', 0.2, 'subjectIds', allExtendedFeatures.subject);
+[matching(2)] = ...
+        psm_causal_effects(allExtendedFeatures, treatment_var, outcome_var, list_of_conf, graph, 'psm_no_replacement', 'caliper',0.2);
 
-list_of_conf = {'sleep_duration', 'prev_stress', 'prev_energy', 'prev_focus', 'prev_mood'};
+%     
+fprintf('NORMALIZED\n');
+[matching(3)] = ...
+        psm_causal_effects(allExtendedFeaturesNorm, treatment_var, outcome_var, list_of_conf, graph, 'psm_no_replacement_inter_subject', 'caliper', 0.2, 'subjectIds', allExtendedFeaturesNorm.subject);
+[matching(4)] = ...
+        psm_causal_effects(allExtendedFeaturesNorm, treatment_var, outcome_var, list_of_conf, graph, 'psm_no_replacement', 'caliper',0.2);
 
-fprintf('\t  %s %s\n', sprintf('%s, ',list_of_conf{1:end-1}), list_of_conf{end});
-%list_of_conf= {'mood'};
-prev_conf = false(length(list_of_conf));
+%
+fName = [figDir filesep treatment_var '2' outcome_var];
+figure; ah =gca;
+scatter(1:4, [matching(:).cd], 'MarkerFaceColor', 'black', 'MarkerEdgeColor', 'black');hold all;
+scatter(1:4, [matching(:).cd_um], 'MarkerFaceColor', 'none', 'MarkerEdgeColor', 'black');
+legend({'matched', 'unmatched'});
+ylabel('Cohen d'); 
+xlim([0 5]);ylim([min([0, min([matching.cd])-0.1]), 1])
+ah.XTick = [0:5];
+ah.XTickLabel ={' ', 'inter-subject', 'pooled', 'inter-subject normalized', 'pooled normalized', ' '};
+ah.XTickLabelRotation =30;
+ah.TickLabelInterpreter='none';
 
+title({['Effect of ' treatment_var ' on ' outcome_var ' matched on ']; [sprintf('%s, ',list_of_conf{1:end-1}), sprintf('%s', list_of_conf{end})]}, 'interpreter', 'none');
+saveas(gcf, fName, 'png');
 
-[treatment, outcome, conf] = psm_data_extended(extendedFeatures, treatment_var, outcome_var, list_of_conf, prev_conf);
-
-[nanRows, ~] = find(isnan([treatment outcome conf]));
-
-%fprintf('Removing %d nan rows\n', length(unique(nanRows)));
-treatment(nanRows) =[];
-outcome(nanRows) =[];
-conf(nanRows, :) =[];
-
-figure;
-plotcorrmatrix([treatment, outcome, conf] , {treatment_var, outcome_var, list_of_conf{:}});%'Energy','Focus', 'Mood','Stress','SlDur', 'SlQual'});
-
-% create dichotomous treatment 
-T=treatment>(max(treatment)-min(treatment))/2;
-
-% estimate propensity scores and do matching
-[pscores, matchedCaseInds, matchedControlInds] = psm(T, conf);
-% figure(11);
-% scatter(pscores(matchedCaseInds), pscores(matchedControlInds), '.')
-
-% Plot standardized differences for matched and unmatched samples
-[nSamples, nCovs] = size(conf);
-cases = conf(matchedCaseInds, :);
-unmatchedControls = conf(setdiff(1:nSamples, matchedCaseInds), :);
-matchedControls = conf(matchedControlInds, :);
-
-d_unmatched = standardized_difference(cases, unmatchedControls);
-d_matched = standardized_difference(cases, matchedControls);
-
-figure;h = gca;
-scatter(abs(d_unmatched), 1:nCovs); hold on;
-scatter(abs(d_matched), 1:nCovs); hold on;
-plot([0.1 0.1], get(gca, 'ylim'));
-h.YTick = 1:nCovs;
-h.YTickLabel = list_of_conf;h.TickLabelInterpreter ='none';
-legend('unmatched', 'matched');
-title('Standardized differences for covariates')%
-
-% compute unmatched differences
-Y_control_um = outcome(setdiff(1:nSamples, matchedCaseInds));
-Y_case = outcome(matchedCaseInds);
-ate_um = nanmean(Y_case)-nanmean(Y_control_um);
-cd_um = cohend(Y_case, Y_control_um);
-[~, pval_um] = ttest2(Y_control_um, Y_case);
-fprintf('UNMATCHED ATE: %.3f, CE: %.3f  pval:%.3f\n', ate_um, cd_um,  pval_um);
+%%
 
 
-% compute matched differences
-Y_control = outcome(matchedControlInds);
-Y_case = outcome(matchedCaseInds);
-ate = nanmean(Y_case)-nanmean(Y_control);
-cd = cohend(Y_case, Y_control);
+%%
 
-% plot matched differences
-[yc,xc]= ksdensity(Y_case); [yct,xct]= ksdensity(Y_control); [yuct,xuct] = ksdensity(Y_control_um);
-figure;hold all;
-plot(xuct, yuct, 'g');plot(xct, yct, 'b');plot(xc, yc, 'r');
-plot([mean(Y_case) mean(Y_case)], get(gca, 'ylim'), 'r');plot([mean(Y_control) mean(Y_control)], get(gca, 'ylim'), 'b');plot([mean(Y_control_um) mean(Y_control_um)], get(gca, 'ylim'), 'g');
-legend({'unmatched controls', 'matched controls', 'cases'}, 'location', 'NorthWest');
-[~, pval] = ttest2(Y_control, Y_case);
+clear;close all;
+load('features', 'extendedFeatures', 'allExtendedFeatures*');load subjects;
+addpath('MaxWeightMatching\')
+% remove nans
+for iSubject=1:length(subjects)
+    if isempty(extendedFeatures{iSubject});continue;
+    end
+    [nanRows, ~] = find(isnan(extendedFeatures{iSubject}{:, :}));
+    fprintf('Removing %d rows with nan values\n', length(nanRows));
+    extendedFeatures{iSubject}(nanRows, :)= [];
+end
 
-fprintf('MATCHED ATE: %.3f, CE: %.3f  pval:%.3f\n', ate, cd,  pval);
+ % Effect of prev_mood on sleep_quality;
+%  treatment_var = 'prev_mood';
+%  outcome_var = 'sleep_quality';
+%  list_of_conf = { 'prev_sleep_duration','prev_activity', 'prev_day_type', 'prev_sleep_quality'};
+ 
+treatment_var = 'sleep_quality';
+outcome_var = 'mood';
+list_of_conf = { 'sleep_duration', 'prev_stress', 'prev_energy', 'prev_focus', 'prev_mood','prev_activity', 'activity', 'day_type', 'prev_day_type'};
+extendedFeatures(depressedSubjects) = [];
 
-% 
-% 
-% figure
-% corr_dur_qual = nan(208, 1);
-% all_sleep= [];
-% for i=1:nSubjects
-%     tmp = features{i};if isempty(tmp);continue;end
-%     hold on;
-%     scatter(tmp{:, 'sleep_quality'}, tmp{:, 'sleep_duration'}, '.');
-%     all_sleep = [all_sleep;tmp{:, {'sleep_quality', 'sleep_duration'}}];
-%     xlabel('sleep_quality');
-%     ylabel('sleep_duration');
-%     title(['subject ' num2str(i)]);
-%     corr_dur_qual(i) = corr(tmp{:, 'sleep_quality'}, tmp{:, 'sleep_duration'}, 'rows', 'pairwise');
-% end
+
+fprintf('-------------------------------------------------------------\n');
+fprintf('Effect of %s on %s given\n', treatment_var, outcome_var);
+fprintf('\t%s\n', list_of_conf{:});
+fprintf('\n-------------------------------------------------------------\n');
+
+nSamples = zeros(length(subjects), 1);
+fprintf('On all subjects\n');
+for iSubject=1:length(subjects)
+    if isempty(extendedFeatures{iSubject});continue;end
+    fprintf('\n*****************Subject %d************\n', iSubject);
+    nSamples(iSubject) = height(extendedFeatures{iSubject}); if nSamples(iSubject)<20;continue;end
+    [ate(iSubject), cd(iSubject), pval(iSubject), ate_um(iSubject), cd_um(iSubject), pval_um(iSubject), parcor(iSubject), cor(iSubject)] = ...
+        psm_causal_effects(extendedFeatures{iSubject}, treatment_var, outcome_var, list_of_conf, false);
+end
+%%
+
+

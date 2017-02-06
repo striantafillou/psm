@@ -39,7 +39,32 @@ for iSub =1:nSubjects
     extendedFeatures{iSub} = [curFeatures prevFeatures];
 end
 
-save features features extendedFeatures;
+allExtendedFeatures = table;
+
+for iSubject=1:nSubjects
+    allExtendedFeatures = [allExtendedFeatures; extendedFeatures{iSubject}];
+end
+
+
+
+allExtendedFeaturesNorm = allExtendedFeatures;
+si =0;
+for iSub =1:nSubjects
+    if isempty(extendedFeatures{iSub});continue;end
+    nSamples(iSub)= height(extendedFeatures{iSub});
+    m = repmat(nanmean(extendedFeatures{iSub}{:, 4:end}), nSamples(iSub), 1);   
+    s = repmat(nanstd(extendedFeatures{iSub}{:, 4:end}), nSamples(iSub), 1);
+    if any(any(s==0))       
+        s(s==0)=1;
+    end
+    allExtendedFeaturesNorm{si+1:si+nSamples(iSub), 4:end} = (allExtendedFeaturesNorm{si+1:si+nSamples(iSub), 4:end}-m)./s;
+    zeroS= find(nanstd(extendedFeatures{iSub}{:, 4:end})==0);
+  
+    si = si+nSamples(iSub);
+end
+%allExtendedFeaturesNorm.day_type = allExtendedFeatures.day_type;
+%allExtendedFeaturesNorm.prev_day_type = allExtendedFeatures.prev_day_type;
+save features features extendedFeatures allExtendedFeatures*;
 
 
 % clear
